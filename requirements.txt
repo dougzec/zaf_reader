@@ -1,0 +1,6 @@
+BeautifulSoup
+pandas
+lxml
+zbarlight
+PIL
+cv2
