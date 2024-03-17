@@ -1,0 +1,10 @@
+services:
+  web:
+    build: .
+    command: uvicorn main:app --port 8501 --host 0.0.0.0 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8501:8501"
+    environment:
+      - NAME=World
