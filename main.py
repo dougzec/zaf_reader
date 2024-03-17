@@ -103,7 +103,7 @@ def get_nfc_data(qrcode_url):
 
     return data
 
-@app.get("/get_nfc_data_from_qrcode/{qrcode_url}")
+@app.get("/get_nfc_data_from_qrcode/")
 def get_nfc_data_from_qrcode(qrcode_url: str):
 
     # return checkking for error and incorporating status code
