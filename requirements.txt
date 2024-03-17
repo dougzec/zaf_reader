@@ -1,6 +1,4 @@
-BeautifulSoup
-pandas
-lxml
-zbarlight
-PIL
-cv2
+fastapi
+uvicorn
+requests
+beautifulsoup4

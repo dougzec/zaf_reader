@@ -1,88 +1,114 @@
-from qrreader import capture_qr
+
 from requests import get
 from bs4 import BeautifulSoup
-import pandas as pd
-from lxml import html
-from datetime import datetime
+import re
+from fastapi import FastAPI
 
-def run():
-    qr = capture_qr()
-    # print(qr)
-#     qr = 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=43201293015006000890651010001540401411138155|2|1|1|A98DB9939667C7114E70D79C2850352E7AF690FC'
-    # url_frame = 'https://www.sefaz.rs.gov.br/ASP/AAE_ROOT/NFE/SAT-WEB-NFE-NFC_QRCODE_1.asp?p=43201293015006000890651010001540401411138155%7C2%7C1%7C1%7CA98DB9939667C7114E70D79C2850352E7AF690FC'
+app = FastAPI()
 
-    response = get(qr)
+def get_nfc_data(qrcode_url):
+   
+    response = get(qrcode_url)
     # print(response.text[:500])
     # print('\n')
     soup = BeautifulSoup(response.text, 'html.parser')
     # type(soup)
 
-    url_frame = soup.find_all('iframe')[0]['src']
-    url_frame
+    # Coletar os itens
+    table = soup.find("table", attrs={"id": 'tabResult'})
 
-    response = get(url_frame)
-    # print(response.text[:500])
-    # print('\n')
-    soup = BeautifulSoup(response.text, 'html.parser')
-    # type(soup)
+    # Initialize an empty list to hold all items
+    items = []
 
-
-    gdp_table = soup.find_all("table", attrs={"class": 'NFCCabecalho'})[3]
-    # print(type(gdp_table))
-    # print(len(gdp_table))
-
-
-    # gdp_table = soup.find("table", attrs={"class": "wikitable"})
-    gdp_table_data = gdp_table.find_all("tr")  # contains 2 rows
-
-    # Get all the headings of Lists
-    headings = []
-    for td in gdp_table_data[0].find_all("td"):
-        # remove any newlines and extra spaces from left and right
-        headings.append(td.text)
-
-    data = []
-
-    for row in gdp_table_data[1:]:
-        data_inter = {}
-        for col, heading in zip(row.find_all('td'), headings):
-
-            valor = col.text
-            if heading in ['Qtde', 'Vl Unit', 'Vl Total']:
-                valor = valor.replace(',', '.')
-                valor = float(valor)
-            else:
-                pass
-
-            data_inter.update({heading: valor})
-        data.append(data_inter)
-
-    # print(data)
+    # Iterate through each row in the table, skipping the header row if present
+    for row in table.find_all('tr'):
+        # Initialize a dictionary to store the item details
+        item_details = {}
+        
+        # Extracting details from the row
+        # Adjust the class names and structure based on your actual HTML
+        item_details['product_name'] = row.find('span', class_='txtTit').text.strip()
+        item_details['code'] = row.find('span', class_='RCod').text.strip().split('\n')[1].strip()
+        item_details['quantity'] = row.find('span', class_='Rqtd').strong.next_sibling.strip()
+        item_details['unit'] = row.find('span', class_='RUN').strong.next_sibling.strip()
+        item_details['unit_price'] = row.find('span', class_='RvlUnit').strong.next_sibling.strip()
+        item_details['total_price'] = row.find('td', class_='txtTit noWrap').find('span', class_='valor').text.strip()
+        
+        # Append the dictionary to the list
+        items.append(item_details)
 
 
-    loja = soup.find_all("table", attrs={"class": 'NFCCabecalho'})[0].find_all('td')[1].text
-    dia = soup.find_all("td", attrs={'class': 'NFCCabecalho_SubTitulo'})[2].text.split('Data de Emissão: ')[-1]
-    dia = datetime.strptime(dia, '%d/%m/%Y  %H:%M:%S')
-    nota = soup.find_all("td", attrs={'class': 'NFCCabecalho_SubTitulo'})[2].text.split('\n')[1].split('NFC-e nº: ')[-1]
-    nota = int(nota)
+    # Coletar o cabeçalho
+        
+    header = soup.find("div", attrs={"class": 'txtCenter'})
 
-
-    df = pd.DataFrame(data)
-    df['Loja'] = loja
-    df['Dia'] = dia
-    df['Nota'] = nota
-    df
-
+    company = header.find_all('div')[0].text
 
     try:
-        df_base = pd.read_csv('database.csv', )
-        df_base = df_base[df_base['Nota'] != nota]
-        df_base = pd.concat([df_base, df])
+        cnpj_raw = header.find_all('div')[1].text
+        cnpj = re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', cnpj_raw).group()
+        cnpj = cnpj.strip()
     except:
-        df_base = df.copy()
-        
-    df_base.to_csv('database.csv', index=None)
-        
-    print('Feito')
-    
-    return df
+        cnpj = "-"
+
+    try:
+        address_raw = header.find_all('div')[2].text
+        address = re.sub(r'\s+', ' ', address_raw).strip()
+        address = re.sub(r'\s+,', ',', address)
+    except:
+        address = "-"
+
+
+    # Outras informações
+
+    # Forma de pagamento
+    payment = soup.find("label", attrs={"class": 'tx'}).text
+    payment = re.sub(r'\s+', ' ', payment).strip()
+
+    # Data,numero, serie e chave de acesso
+    text = soup.find("div", attrs={"id": "infos"}).text
+
+    # Regular expressions for each field
+    date_re = r'Emissão:\s*(\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2})'
+    number_re = r'Número:\s*(\d+)'
+    serie_re = r'Série:\s*(\d+)'
+    access_key_re = r'(\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4})' # r'([\d\s]{54})'
+
+    # Search for each pattern in the text
+    date_match = re.search(date_re, text)
+    number_match = re.search(number_re, text)
+    serie_match = re.search(serie_re, text)
+    access_key_match = re.search(access_key_re, text)
+
+    # Extracting the matched groups if found
+    date = date_match.group(1) if date_match else "-"
+    numero = number_match.group(1) if number_match else "-"
+    serie = serie_match.group(1) if serie_match else "-"
+    chave_de_acesso = access_key_match.group(1) if access_key_match else "-"
+
+
+
+    # make a json with all the info
+    data = {
+        "company": company,
+        "cnpj": cnpj,
+        "address": address,
+        "payment": payment,
+        "date": date,
+        "numero": numero,
+        "serie": serie,
+        "chave_de_acesso": chave_de_acesso,
+        "items": items
+    }
+
+    return data
+
+@app.get("/get_nfc_data_from_qrcode")
+def get_nfc_data_from_qrcode(qrcode_url: str):
+
+    # return checkking for error and incorporating status code
+    try:
+        data = get_nfc_data(qrcode_url)
+        return {"status": "success", "data": data}
+    except:
+        return {"status": "error", "data": "Invalid URL or QR code"}
