@@ -140,12 +140,13 @@ def get_nfc_data_from_qrcode(qrcode_url: str):
         return {"status": "error", "data": "Invalid URL or QR code"}
     
 @app.get("/get_nfc_data_from_qrcode_and_upload_to_gbq/")
-def get_nfc_data_from_qrcode(qrcode_url: str):
+def get_nfc_data_from_qrcode(qrcode_url: str, user: str = "Não informado"):
 
     # return checkking for error and incorporating status code
     
     try:
         data = get_nfc_data(qrcode_url)
+        data.update({"user": user})
         # upload to GBQ
         errors = upload_to_gbq(data)
         if errors == []:
