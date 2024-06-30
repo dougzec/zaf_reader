@@ -3,8 +3,17 @@ from requests import get
 from bs4 import BeautifulSoup
 import re
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # This is for development only; specify your front-end domain in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_nfc_data(qrcode_url):
    
