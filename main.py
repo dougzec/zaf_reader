@@ -4,6 +4,11 @@ from bs4 import BeautifulSoup
 import re
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from google.cloud import bigquery
+import datetime
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 app = FastAPI()
 
@@ -39,10 +44,12 @@ def get_nfc_data(qrcode_url):
         item_details['product_name'] = row.find('span', class_='txtTit').text.strip()
         item_details['code'] = row.find('span', class_='RCod').text.strip().split('\n')[1].strip()
         item_details['quantity'] = row.find('span', class_='Rqtd').strong.next_sibling.strip()
+        item_details['quantity'] = float(item_details['quantity'].replace(',', '.'))
         item_details['unit'] = row.find('span', class_='RUN').strong.next_sibling.strip()
         item_details['unit_price'] = row.find('span', class_='RvlUnit').strong.next_sibling.strip()
+        item_details['unit_price'] = float(item_details['unit_price'].replace(',', '.'))
         item_details['total_price'] = row.find('td', class_='txtTit noWrap').find('span', class_='valor').text.strip()
-        
+        item_details['total_price'] = float(item_details['total_price'].replace(',', '.'))        
         # Append the dictionary to the list
         items.append(item_details)
 
@@ -112,6 +119,13 @@ def get_nfc_data(qrcode_url):
 
     return data
 
+def upload_to_gbq(data):
+    data.update({"created_at": datetime.datetime.now().isoformat()})
+    client = bigquery.Client()
+    table_id = "backend.notas_fiscais"
+    rows_to_insert = [data]
+    return client.insert_rows_json(table_id, rows_to_insert)
+
 @app.get("/get_nfc_data_from_qrcode/")
 def get_nfc_data_from_qrcode(qrcode_url: str):
 
@@ -119,5 +133,21 @@ def get_nfc_data_from_qrcode(qrcode_url: str):
     try:
         data = get_nfc_data(qrcode_url)
         return {"status": "success", "data": data}
+    except:
+        return {"status": "error", "data": "Invalid URL or QR code"}
+    
+@app.get("/get_nfc_data_from_qrcode_and_upload_to_gbq/")
+def get_nfc_data_from_qrcode(qrcode_url: str):
+
+    # return checkking for error and incorporating status code
+    
+    try:
+        data = get_nfc_data(qrcode_url)
+        # upload to GBQ
+        errors = upload_to_gbq(data)
+        if errors == []:
+            return {"status": "success", "data": data}
+        else:
+            return {"status": "error", "data": "Error uploading to GBQ"}
     except:
         return {"status": "error", "data": "Invalid URL or QR code"}
