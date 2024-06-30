@@ -22,6 +22,9 @@ app.add_middleware(
 
 def get_nfc_data(qrcode_url):
    
+    if "www.sefaz.rs.gov.br" not in qrcode_url:
+        qrcode_url = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + qrcode_url
+
     response = get(qrcode_url)
     # print(response.text[:500])
     # print('\n')
